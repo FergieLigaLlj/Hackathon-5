@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, stepCountIs } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { systemPrompt } from "@/lib/system-prompt";
 import { tools } from "@/lib/tools";
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages,
     tools,
-    maxSteps: 8,
+    stopWhen: stepCountIs(8),
   });
 
   return result.toUIMessageStreamResponse();

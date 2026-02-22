@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useState, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { Bot, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,20 +20,23 @@ const QUICK_ACTIONS = [
 ] as const;
 
 export function ChatPanel() {
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    setInput,
-    append,
-  } = useChat();
-
+  const { messages, sendMessage, status, stop } = useChat();
+  const [input, setInput] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
+  const isLoading = status === "submitted" || status === "streaming";
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) return;
+    sendMessage({ text: trimmed });
+    setInput("");
+  };
+
   const handleQuickAction = (prompt: string) => {
-    append({ role: "user", content: prompt });
+    if (isLoading) return;
+    sendMessage({ text: prompt });
   };
 
   return (
@@ -89,7 +92,7 @@ export function ChatPanel() {
         >
           <Input
             value={input}
-            onChange={handleInputChange}
+            onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about your projects..."
             disabled={isLoading}
             className="flex-1"
@@ -97,7 +100,7 @@ export function ChatPanel() {
           <Button
             type="submit"
             size="icon"
-            disabled={isLoading || !(input ?? "").trim()}
+            disabled={isLoading || !input.trim()}
           >
             <Send className="size-4" />
             <span className="sr-only">Send message</span>

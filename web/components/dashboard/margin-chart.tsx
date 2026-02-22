@@ -59,7 +59,7 @@ export default function MarginChart({ data }: MarginChartProps) {
               className="text-muted-foreground"
             />
             <Tooltip
-              formatter={(value: number) => [`${value}%`]}
+              formatter={(value) => `${value}%`}
               contentStyle={{
                 backgroundColor: "hsl(var(--card))",
                 border: "1px solid hsl(var(--border))",
