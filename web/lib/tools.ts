@@ -485,13 +485,13 @@ export const tools = {
 
   detectScopeCreep: tool({
     description:
-      "Query scope_creep_candidates to find out-of-scope work. Shows recoverable costs (responsibility is owner or gc with co_status = not_submitted), absorbed costs (responsibility is morrison), and pending items. Optionally filter by projectId.",
+      "Find out-of-scope work and quantify recoverable revenue. Returns three categories: (1) Recoverable — responsibility is owner/gc with co_status='not_submitted', meaning COs should be submitted to recover these costs; (2) Absorbed — Morrison is eating these costs; (3) Pending — COs submitted but awaiting approval. Includes dollar totals for each category. After calling this, consider calling analyzeChangeOrders to cross-reference the CO pipeline.",
     inputSchema: z.object({
       projectId: z
         .string()
         .optional()
         .describe(
-          "Optional project ID. If omitted, checks all projects for scope creep."
+          "Project ID (e.g. 'P-101') to filter. Omit for all projects."
         ),
     }),
     execute: async ({ projectId }) => {
@@ -575,13 +575,13 @@ export const tools = {
 
   analyzeLaborOverruns: tool({
     description:
-      "Compare actual labor hours and cost vs budgeted amounts from sov_budget per SOV line. Flags lines where actual exceeds budget by more than 10%. Optionally filter by projectId.",
+      "Compare actual labor hours and cost vs budgeted amounts per SOV line. Automatically flags line items where actual cost exceeds budget by >10%. Returns: all lines with hours/cost variance and overrun percentages, plus a separate flaggedLines array with only the overruns and their total dollar impact. Use to identify labor productivity problems. Follow up with getFieldNotes to find root causes (delays, rework, weather, staffing issues).",
     inputSchema: z.object({
       projectId: z
         .string()
         .optional()
         .describe(
-          "Optional project ID. If omitted, analyzes all projects for labor overruns."
+          "Project ID (e.g. 'P-101') for single-project analysis. Omit for portfolio-wide labor overrun scan."
         ),
     }),
     execute: async ({ projectId }) => {
@@ -684,13 +684,13 @@ export const tools = {
 
   analyzeChangeOrders: tool({
     description:
-      "Show the change order pipeline: pending, approved, and rejected COs with dollar amounts and reason categories. Optionally filter by projectId.",
+      "Analyze the change order pipeline with status breakdown (Approved/Pending/Under Review/Rejected) and dollar totals per status. Also provides a reason_category summary showing what's driving COs (design changes, unforeseen conditions, owner requests, etc.). Use to assess pending revenue at risk, track CO approval rates, and identify patterns. Cross-reference with detectScopeCreep to find scope creep items that don't yet have COs submitted.",
     inputSchema: z.object({
       projectId: z
         .string()
         .optional()
         .describe(
-          "Optional project ID. If omitted, shows CO pipeline for all projects."
+          "Project ID (e.g. 'P-101') to filter. Omit for portfolio-wide CO pipeline."
         ),
     }),
     execute: async ({ projectId }) => {
@@ -763,23 +763,23 @@ export const tools = {
 
   getFieldNotes: tool({
     description:
-      "Search field notes by project, content keyword, or note type. Useful for finding on-site observations, issues, delays, and safety concerns that may explain financial variances.",
+      "Search daily field observations to find root causes behind financial variances. Contains on-site notes about delays, issues, safety incidents, and progress updates. Use after finding a financial anomaly (labor overrun, billing lag, etc.) to explain WHY it happened. All three filters are optional and combine with AND logic. Returns up to 100 notes sorted by date descending.",
     inputSchema: z.object({
       projectId: z
         .string()
         .optional()
-        .describe("Optional project ID to filter field notes."),
+        .describe("Project ID (e.g. 'P-101') to filter notes."),
       search: z
         .string()
         .optional()
         .describe(
-          "Optional keyword to search in note content using case-insensitive matching."
+          "Case-insensitive keyword search in note content. Examples: 'rain', 'rework', 'shortage', 'inspection failed'."
         ),
       noteType: z
         .string()
         .optional()
         .describe(
-          "Optional note_type filter, e.g. 'delay', 'issue', 'safety', 'progress'."
+          "Filter by note type. Valid values: 'delay', 'issue', 'safety', 'progress'."
         ),
     }),
     execute: async ({ projectId, search, noteType }) => {
