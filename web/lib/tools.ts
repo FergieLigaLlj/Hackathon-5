@@ -5,12 +5,12 @@ import { sql } from "@/lib/db";
 export const tools = {
   queryDatabase: tool({
     description:
-      "Execute an arbitrary SELECT query against the project database. Use this for custom analysis that the specialized tools do not cover. Only SELECT statements are allowed.",
+      "Execute a read-only SELECT query against the PostgreSQL database. Use ONLY when the specialized tools (getPortfolioOverview, analyzeMargin, etc.) cannot answer the question — e.g., ad-hoc joins, date-range filters, or aggregations not covered elsewhere. Returns raw rows and row count. Non-SELECT statements are rejected.",
     inputSchema: z.object({
       query: z
         .string()
         .describe(
-          "A SQL SELECT query to execute. Must be a read-only SELECT statement."
+          "A PostgreSQL SELECT query. Must start with SELECT. Use table/column names from the schema: contracts, sov, sov_budget, labor_logs, material_deliveries, change_orders, rfis, field_notes, billing_history, billing_line_items, scope_creep_candidates. Example: 'SELECT project_id, SUM(total_cost) FROM material_deliveries GROUP BY project_id'"
         ),
     }),
     execute: async ({ query }) => {
@@ -25,7 +25,7 @@ export const tools = {
 
   getPortfolioOverview: tool({
     description:
-      "Get a high-level financial overview of the entire project portfolio: total contract value, bid margin, realized margin, at-risk amount, billing status, and project count. Always call this first to understand the current state.",
+      "CALL THIS FIRST before any other tool. Returns the portfolio-wide financial snapshot: total contract value, bid cost, bid margin, total billed, actual costs (labor + materials), realized margin, at-risk scope creep amount, project count, and pending change order pipeline. This establishes the baseline context needed for all subsequent analysis.",
     inputSchema: z.object({}),
     execute: async () => {
       const contractRows = await sql`
@@ -117,11 +117,11 @@ export const tools = {
 
   getProjectDetails: tool({
     description:
-      "Deep dive into a single project: contract info, billing status, labor vs budget, material costs, pending change orders, and scope creep items. Use this after getPortfolioOverview to investigate specific projects.",
+      "Deep-dive into a single project. Returns: contract metadata, latest billing application, actual vs budgeted labor (cost and hours), actual vs budgeted materials, equipment and subcontractor budgets, all change orders, scope creep candidates, and per-SOV billing line items. Use after getPortfolioOverview when a specific project needs investigation.",
     inputSchema: z.object({
       projectId: z
         .string()
-        .describe("The project ID to get details for, e.g. 'P-101'"),
+        .describe("The project ID, e.g. 'P-101'. Must match a project_id in the contracts table."),
     }),
     execute: async ({ projectId }) => {
       const contractRows = await sql`
