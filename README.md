@@ -156,8 +156,6 @@ How you design your tools, what data they access, and how many steps you allow i
 
 ---
 
----
-
 ## Resources
 
 - [Vercel AI SDK — Building Agents](https://sdk.vercel.ai/docs/agents/building-agents)
