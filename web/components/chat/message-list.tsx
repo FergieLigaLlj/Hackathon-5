@@ -72,12 +72,17 @@ export function MessageList({ messages }: MessageListProps) {
                       part.type.startsWith("tool-")
                     ) {
                       const toolPart = part as {
-                        toolName: string;
+                        type: string;
+                        toolName?: string;
                         toolCallId: string;
                         state: string;
                         input?: unknown;
                         output?: unknown;
                       };
+
+                      const toolName =
+                        toolPart.toolName ??
+                        toolPart.type.replace(/^tool-/, "");
 
                       let displayState: "call" | "result" | "partial-call";
                       if (
@@ -93,7 +98,7 @@ export function MessageList({ messages }: MessageListProps) {
                       return (
                         <ToolCallDisplay
                           key={toolPart.toolCallId || partIndex}
-                          toolName={toolPart.toolName}
+                          toolName={toolName}
                           args={
                             (toolPart.input as Record<string, unknown>) ?? {}
                           }
