@@ -11,7 +11,7 @@ Last quarter, three projects closed out at **6.8% realized margin** against a **
 
 Dashboards show you data. **You need something that thinks.**
 
-An agent doesn't wait to be asked. It reasons through your portfolio, decides what matters, takes action, and reports back — autonomously.
+An agent doesn't wait to be asked. It reasons through your portfolio, decides what matters, takes action, and reports back — autonomously
 
 ---
 
