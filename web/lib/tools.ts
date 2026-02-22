@@ -217,13 +217,13 @@ export const tools = {
 
   analyzeMargin: tool({
     description:
-      "Compare bid margin vs realized margin. If a projectId is provided, break down the analysis by SOV line to identify which line items are over or under budget. Computes bid cost from sov_budget, actual cost from labor_logs + material_deliveries, and billed from billing_line_items.",
+      "Compare bid margin vs realized margin to find margin erosion. Without projectId: returns per-project comparison with marginDelta (negative = underperforming). With projectId: breaks down by SOV line item showing which specific line items are bleeding margin, with bid cost, actual cost, billed amount, and variance for each. Use this to answer 'where are we losing money?' and 'which line items are over budget?'",
     inputSchema: z.object({
       projectId: z
         .string()
         .optional()
         .describe(
-          "Optional project ID to analyze. If omitted, analyzes all projects."
+          "Project ID (e.g. 'P-101') for SOV-line-level breakdown. Omit for portfolio-wide project-by-project comparison."
         ),
     }),
     execute: async ({ projectId }) => {
