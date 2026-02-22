@@ -62,6 +62,17 @@ This document defines the relationships between all data entities in the HVAC co
 │ PK: note_id      │
 │ FK: project_id   │
 └──────────────────┘
+
+┌──────────────────────────┐
+│ SCOPE_CREEP_CANDIDATES   │ (Derived from field notes - margin leak detection)
+│──────────────────────────│
+│ PK: scope_id             │
+│ FK: project_id           │
+│ estimated_labor_hours    │
+│ estimated_material_cost  │
+│ co_status                │ (not_submitted/pending/absorbed/awaiting_approval)
+│ responsibility           │ (owner/gc/architect/vendor/tbd/self_absorbed)
+└──────────────────────────┘
 ```
 
 ---
@@ -154,6 +165,13 @@ This document defines the relationships between all data entities in the HVAC co
 total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 ```
 
+**Special Pattern - OVR-* Records:**
+Labor logs with `log_id` prefix `OVR-*` (125 records) represent overtime/rework entries linked to scope creep issues. These are valid records with unique IDs—not duplicates. Query for margin leak analysis:
+```sql
+SELECT * FROM labor_logs WHERE log_id LIKE 'OVR-%'
+-- 125 records, 1,186 hours, $133,558 total cost
+```
+
 ---
 
 ### 5. MATERIAL_DELIVERIES
@@ -185,8 +203,8 @@ total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| `co_number` | VARCHAR(10) | **PRIMARY KEY** | Change order number |
-| `project_id` | VARCHAR(12) | **FOREIGN KEY** → contracts | Links to project |
+| `project_id` | VARCHAR(12) | **PRIMARY KEY (composite)**, FK → contracts | Links to project |
+| `co_number` | VARCHAR(10) | **PRIMARY KEY (composite)** | Change order number |
 | `date_submitted` | DATE | NOT NULL | Submission date |
 | `reason_category` | VARCHAR(30) | NOT NULL | Category |
 | `description` | TEXT | NOT NULL | Detailed description |
@@ -213,8 +231,8 @@ total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| `rfi_number` | VARCHAR(10) | **PRIMARY KEY** | RFI number |
-| `project_id` | VARCHAR(12) | **FOREIGN KEY** → contracts | Links to project |
+| `project_id` | VARCHAR(12) | **PRIMARY KEY (composite)**, FK → contracts | Links to project |
+| `rfi_number` | VARCHAR(10) | **PRIMARY KEY (composite)** | RFI number (unique per project) |
 | `date_submitted` | DATE | NOT NULL | Submission date |
 | `subject` | TEXT | NOT NULL | Question/issue description |
 | `submitted_by` | VARCHAR(50) | NOT NULL | Person who submitted |
@@ -229,7 +247,7 @@ total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 
 **Relationships:**
 - `project_id` → contracts.project_id (N:1)
-- Referenced by: change_orders.related_rfi (0..1:N)
+- Referenced by: change_orders.(project_id, related_rfi) (0..1:N)
 
 ---
 
@@ -295,6 +313,36 @@ total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 
 ---
 
+### 11. SCOPE_CREEP_CANDIDATES (Derived Table)
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `scope_id` | VARCHAR(10) | **PRIMARY KEY** | Unique scope item ID (SCOPE-NNN) |
+| `project_id` | VARCHAR(12) | **FOREIGN KEY** → contracts | Links to project |
+| `date` | DATE | NOT NULL | Date identified |
+| `author` | VARCHAR(30) | NOT NULL | Person who noted issue |
+| `note_type` | VARCHAR(20) | NOT NULL | Original note type |
+| `estimated_labor_hours` | INT | NOT NULL | Estimated unbilled hours |
+| `estimated_material_cost` | DECIMAL(12,2) | NOT NULL | Estimated unbilled materials |
+| `approval_status` | VARCHAR(15) | NOT NULL | verbal/written/none/undocumented |
+| `co_status` | VARCHAR(20) | NOT NULL | not_submitted/pending/absorbed/awaiting_approval |
+| `root_cause` | VARCHAR(20) | NOT NULL | design_conflict/owner_change/gc_coordination/etc |
+| `responsibility` | VARCHAR(15) | NOT NULL | owner/gc/architect/vendor/tbd/self_absorbed |
+| `description` | TEXT | NOT NULL | Truncated description (200 chars) |
+| `full_description` | TEXT | NOT NULL | Complete field note content |
+
+**Relationships:**
+- `project_id` → contracts.project_id (N:1)
+
+**Purpose:** Identifies potential margin leaks from unbilled scope changes—work done with verbal approval, no CO submitted, or costs absorbed as "goodwill". Critical for margin rescue agent.
+
+**Key Queries:**
+- Total unbilled: `SUM(estimated_labor_hours)` WHERE `co_status = 'not_submitted'`
+- Recoverable costs: WHERE `responsibility IN ('owner', 'gc')` AND `co_status = 'not_submitted'`
+- Absorbed losses: WHERE `co_status = 'absorbed'`
+
+---
+
 ## Relationship Summary
 
 ### Cardinality Overview
@@ -308,12 +356,13 @@ total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 | contracts | change_orders | 1:N | project_id |
 | contracts | rfis | 1:N | project_id |
 | contracts | field_notes | 1:N | project_id |
+| contracts | scope_creep_candidates | 1:N | project_id |
 | contracts | billing_history | 1:N | project_id |
 | sov | sov_budget | 1:1 | sov_line_id |
 | sov | labor_logs | 1:N | sov_line_id |
 | sov | material_deliveries | 1:N | sov_line_id |
 | sov | billing_line_items | 1:N | sov_line_id |
-| rfis | change_orders | 0..1:N | related_rfi |
+| rfis | change_orders | 0..1:N | (project_id, related_rfi) |
 | billing_history | billing_line_items | 1:N | (project_id, application_number) |
 
 ### Many-to-Many Relationship
@@ -330,10 +379,11 @@ total_cost = (hours_st + hours_ot * 1.5) * hourly_rate * burden_multiplier
 
 ```sql
 CREATE TABLE change_order_sov_lines (
+    project_id VARCHAR(12) NOT NULL,
     co_number VARCHAR(10) NOT NULL,
     sov_line_id VARCHAR(25) NOT NULL,
-    PRIMARY KEY (co_number, sov_line_id),
-    FOREIGN KEY (co_number) REFERENCES change_orders(co_number),
+    PRIMARY KEY (project_id, co_number, sov_line_id),
+    FOREIGN KEY (project_id, co_number) REFERENCES change_orders(project_id, co_number),
     FOREIGN KEY (sov_line_id) REFERENCES sov(sov_line_id)
 );
 ```
@@ -351,6 +401,7 @@ for _, row in co.iterrows():
         sov_lines = ast.literal_eval(row['affected_sov_lines'])
         for sov_line in sov_lines:
             junction_rows.append({
+                'project_id': row['project_id'],
                 'co_number': row['co_number'],
                 'sov_line_id': sov_line
             })
@@ -444,8 +495,9 @@ CREATE INDEX idx_material_sov ON material_deliveries(sov_line_id);
 
 -- 6. RFIs
 CREATE TABLE rfis (
-    rfi_number VARCHAR(10) PRIMARY KEY,
     project_id VARCHAR(12) NOT NULL REFERENCES contracts(project_id),
+    rfi_number VARCHAR(10) NOT NULL,
+    PRIMARY KEY (project_id, rfi_number),
     date_submitted DATE NOT NULL,
     subject TEXT NOT NULL,
     submitted_by VARCHAR(50) NOT NULL,
@@ -463,16 +515,17 @@ CREATE INDEX idx_rfi_status ON rfis(status);
 
 -- 7. Change Orders
 CREATE TABLE change_orders (
-    co_number VARCHAR(10) PRIMARY KEY,
     project_id VARCHAR(12) NOT NULL REFERENCES contracts(project_id),
+    co_number VARCHAR(10) NOT NULL,
+    PRIMARY KEY (project_id, co_number),
     date_submitted DATE NOT NULL,
     reason_category VARCHAR(30) NOT NULL,
     description TEXT NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
-    -- NOTE: Current data only contains 'Approved' and 'Rejected' statuses
-    -- Schema allows 'Pending'/'Under Review' for future data
+    -- Data contains all four statuses after recovery of misplaced COs
     status VARCHAR(15) NOT NULL CHECK (status IN ('Pending', 'Under Review', 'Approved', 'Rejected')),
-    related_rfi VARCHAR(10) REFERENCES rfis(rfi_number),
+    related_rfi VARCHAR(10),
+    FOREIGN KEY (project_id, related_rfi) REFERENCES rfis(project_id, rfi_number),
     labor_hours_impact INT,
     schedule_impact_days INT,
     submitted_by VARCHAR(30) NOT NULL,
@@ -483,9 +536,11 @@ CREATE INDEX idx_co_status ON change_orders(status);
 
 -- 8. Change Order SOV Lines (Junction Table)
 CREATE TABLE change_order_sov_lines (
-    co_number VARCHAR(10) NOT NULL REFERENCES change_orders(co_number),
+    project_id VARCHAR(12) NOT NULL,
+    co_number VARCHAR(10) NOT NULL,
     sov_line_id VARCHAR(25) NOT NULL REFERENCES sov(sov_line_id),
-    PRIMARY KEY (co_number, sov_line_id)
+    PRIMARY KEY (project_id, co_number, sov_line_id),
+    FOREIGN KEY (project_id, co_number) REFERENCES change_orders(project_id, co_number)
 );
 
 -- 9. Field Notes
@@ -536,6 +591,26 @@ CREATE TABLE billing_line_items (
         REFERENCES billing_history(project_id, application_number)
 );
 CREATE INDEX idx_billing_items_sov ON billing_line_items(sov_line_id);
+
+-- 12. Scope Creep Candidates (Derived Table for Margin Leak Detection)
+CREATE TABLE scope_creep_candidates (
+    scope_id VARCHAR(10) PRIMARY KEY,
+    project_id VARCHAR(12) NOT NULL REFERENCES contracts(project_id),
+    date DATE NOT NULL,
+    author VARCHAR(30) NOT NULL,
+    note_type VARCHAR(20) NOT NULL,
+    estimated_labor_hours INT NOT NULL DEFAULT 0,
+    estimated_material_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
+    approval_status VARCHAR(15) NOT NULL CHECK (approval_status IN ('verbal', 'written', 'none', 'undocumented')),
+    co_status VARCHAR(20) NOT NULL CHECK (co_status IN ('not_submitted', 'pending', 'absorbed', 'awaiting_approval')),
+    root_cause VARCHAR(20) NOT NULL,
+    responsibility VARCHAR(15) NOT NULL CHECK (responsibility IN ('owner', 'gc', 'architect', 'vendor', 'tbd', 'self_absorbed', 'code_compliance')),
+    description TEXT NOT NULL,
+    full_description TEXT NOT NULL
+);
+CREATE INDEX idx_scope_project ON scope_creep_candidates(project_id);
+CREATE INDEX idx_scope_status ON scope_creep_candidates(co_status);
+CREATE INDEX idx_scope_responsibility ON scope_creep_candidates(responsibility);
 ```
 
 ---
@@ -555,6 +630,7 @@ Due to foreign key dependencies, import tables in this order:
 9. `field_notes`
 10. `billing_history`
 11. `billing_line_items`
+12. `scope_creep_candidates`
 
 ---
 
@@ -589,12 +665,12 @@ CREATE INDEX idx_notes_content ON field_notes USING gin(to_tsvector('english', c
                │                        │                        │
                ▼                        ▼                        ▼
               sov ◄──────────────► sov_budget              field_notes
-               │
-    ┌──────────┼──────────┐
-    │          │          │
-    ▼          ▼          ▼
-labor_logs  materials  billing_line_items
-                              │
+               │                                                 │
+    ┌──────────┼──────────┐                          (extracted to)
+    │          │          │                                      │
+    ▼          ▼          ▼                                      ▼
+labor_logs  materials  billing_line_items              scope_creep_candidates
+                              │                        (margin leak detection)
                               ▼
                         billing_history
 
@@ -613,3 +689,6 @@ labor_logs  materials  billing_line_items
 3. **Change Order Impact**: Parse `affected_sov_lines` JSON to identify impacted work areas
 4. **Billing Lag Detection**: Compare actual costs vs `total_billed` at SOV line level
 5. **RFI Cost Exposure**: Filter RFIs where `cost_impact = TRUE` and `status != 'Closed'`
+6. **Scope Creep Detection**: Query `scope_creep_candidates` for unbilled work (co_status = 'not_submitted')
+7. **Margin Leak Priority**: Filter scope_creep_candidates where responsibility = 'owner' or 'gc' for recoverable costs
+8. **Rework Labor Identification**: Labor logs with `log_id LIKE 'OVR-%'` are overtime/rework entries (125 records, $133,558 total cost). These correlate to scope_creep_candidates but actual hours (1,186) exceed estimates (492) by 2.4×
