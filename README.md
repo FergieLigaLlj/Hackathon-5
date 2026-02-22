@@ -1,6 +1,6 @@
 # The HVAC Margin Rescue Challenge
 ## Hackathon — Build an AI Agent (5-6 Hours)
-
+ 
 ---
 
 ## The Scenario
