@@ -367,13 +367,13 @@ export const tools = {
 
   detectBillingLag: tool({
     description:
-      "Find projects where actual costs (labor + materials) exceed cumulative billed amounts. This indicates Morrison is financing the work and there is a cash flow risk. Optionally filter by projectId.",
+      "Identify cash flow risk by finding where actual costs exceed cumulative billed amounts. A positive 'lag' value means Morrison is financing the GC's project out of pocket. Without projectId: shows lag per project. With projectId: breaks down by SOV line to pinpoint which line items are under-billed. Use for cash flow analysis, billing acceleration recommendations, and pay application prioritization.",
     inputSchema: z.object({
       projectId: z
         .string()
         .optional()
         .describe(
-          "Optional project ID. If omitted, checks all projects for billing lag."
+          "Project ID (e.g. 'P-101') for SOV-line-level billing lag. Omit for portfolio-wide summary."
         ),
     }),
     execute: async ({ projectId }) => {
