@@ -324,7 +324,7 @@ export const tools = {
           GROUP BY project_id
         ) mat ON mat.project_id = c.project_id
         LEFT JOIN (
-          SELECT bh.project_id, bh.total_billed AS total_billed
+          SELECT bh.project_id, bh.cumulative_billed AS total_billed
           FROM billing_history bh
           INNER JOIN (
             SELECT project_id, MAX(application_number) AS max_app
@@ -454,7 +454,7 @@ export const tools = {
           GROUP BY project_id
         ) mat ON mat.project_id = c.project_id
         LEFT JOIN (
-          SELECT bh.project_id, bh.total_billed AS total_billed
+          SELECT bh.project_id, bh.cumulative_billed AS total_billed
           FROM billing_history bh
           INNER JOIN (
             SELECT project_id, MAX(application_number) AS max_app
